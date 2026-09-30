@@ -2,7 +2,6 @@ package com.deepak.inventoryService.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -15,7 +14,16 @@ import com.deepak.inventoryService.DTO.InventoryUpdateDto;
 import com.deepak.inventoryService.DTO.InventoryUpdateId;
 import com.deepak.inventoryService.Repository.InventoryRepository;
 import com.deepak.inventoryService.entity.Inventory;
+import com.deepak.inventoryService.kafka.InventoryCommitEvent;
+import com.deepak.inventoryService.kafka.InventoryCommitItem;
+import com.deepak.inventoryService.kafka.InventoryItemEvent;
+import com.deepak.inventoryService.kafka.InventoryReserveEvent;
+import com.deepak.inventoryService.kafka.InventroyEventProducer;
+import com.deepak.inventoryService.kafka.OrderCreatedEvent;
+import com.deepak.inventoryService.kafka.OrderItemEvent;
+import com.deepak.inventoryService.kafka.OrderReservedEvent;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -23,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class InventoryServiceImp implements InventoryService {
 
 	private final InventoryRepository invRepo;
+	private final InventroyEventProducer inventroyEventProducer;
 
 	// user by warehouse
 	@Override
@@ -35,7 +44,7 @@ public class InventoryServiceImp implements InventoryService {
 		inv.setAvailableQuantity(req.getStockQuantity());
 		inv.setReservedQuantity(0);
 		inv.setCreatedAt(LocalDateTime.now());
-		inv.setStatus(req.getStockQuantity() > 0 ? "IN_STOCK" : "OUT_OF_STOCK");
+		inv.setAvailablitiyStatus(req.getStockQuantity() > 0 ? "IN_STOCK" : "OUT_OF_STOCK");
 
 		invRepo.save(inv);
 
@@ -58,7 +67,7 @@ public class InventoryServiceImp implements InventoryService {
 		invresDto.setId(inventory.getId());
 		invresDto.setSkuCode(inventory.getSkuCode());
 		invresDto.setStockQuantity(inventory.getAvailableQuantity());
-		invresDto.setAvailablityStatus(inventory.getStatus());
+		invresDto.setAvailablityStatus(inventory.getAvailablitiyStatus());
 
 		return invresDto;
 
@@ -77,7 +86,7 @@ public class InventoryServiceImp implements InventoryService {
 		return ResponseEntity.ok("Stock updated Successfully..");
 	}
 
-	// Order Service
+	// reduce stock Order Service
 	@Override // we have skuCode to identify the inventory & quantity how much quantity would
 				// be decreased..
 	public ResponseEntity<String> reduceInventory(String skuCode, Integer quantity) {
@@ -94,6 +103,72 @@ public class InventoryServiceImp implements InventoryService {
 
 		invRepo.save(inv);
 		return ResponseEntity.ok("Quantity reduce succesfully.... updated quantity : " + inv.getAvailableQuantity());
+	}
+
+	// reduce Stocks using kafka [COD]
+
+	public void reduceStock(OrderCreatedEvent event) {
+
+		for (OrderItemEvent item : event.getItems()) {
+
+			Inventory inventory = invRepo.findBySkuCode(item.getSkuCode())
+					.orElseThrow(() -> new RuntimeException("Inventory not found: " + item.getSkuCode()));
+
+			// Check availability
+			if (inventory.getAvailableQuantity() < item.getQuantity()) {
+
+				throw new RuntimeException("Insufficient stock for SKU: " + item.getSkuCode());
+			}
+
+			// Reduce available stock
+			inventory.setAvailableQuantity(inventory.getAvailableQuantity() - item.getQuantity());
+
+			// Reserve stock
+			inventory.setReservedQuantity(inventory.getReservedQuantity() + item.getQuantity());
+
+			invRepo.save(inventory);
+		}
+		
+		// Inventory successfully reserved
+		
+		OrderReservedEvent reservedEvent = new OrderReservedEvent();
+
+		reservedEvent.setOrderId(event.getOrderId());
+		reservedEvent.setStatus("RESERVED");
+
+		inventroyEventProducer.publishOrderReserved(reservedEvent);
+	}
+
+	// kafka ONLINE
+	@Override
+	public void reserveStock(InventoryReserveEvent event) {
+
+		for (InventoryItemEvent item : event.getItems()) {
+
+			Inventory inventory = invRepo.findBySkuCode(item.getSkuCode())
+					.orElseThrow(() -> new RuntimeException("Inventory not found for SKU: " + item.getSkuCode()));
+
+			if (inventory.getAvailableQuantity() < item.getQuantity()) {
+
+				throw new RuntimeException("Insufficient stock for SKU: " + item.getSkuCode());
+			}
+
+			inventory.setAvailableQuantity(inventory.getAvailableQuantity() - item.getQuantity());
+
+			inventory.setReservedQuantity(inventory.getReservedQuantity() + item.getQuantity());
+
+			invRepo.save(inventory);
+		}
+
+		// All items reserved successfully
+
+		OrderReservedEvent reservedEvent = new OrderReservedEvent();
+
+		reservedEvent.setOrderId(event.getOrderId());
+		reservedEvent.setStatus("RESERVED");
+
+		// ✅ Correct
+		inventroyEventProducer.publishOrderReserved(reservedEvent);
 	}
 
 	// Admin
@@ -181,4 +256,31 @@ public class InventoryServiceImp implements InventoryService {
 
 		return inventoryList;
 	}
+
+	@Override
+	@Transactional
+	public void commitInventory(InventoryCommitEvent event) {
+
+		for (InventoryCommitItem item : event.getItems()) {
+
+			Inventory inventory = invRepo.findBySkuCode(item.getSkuCode())
+					.orElseThrow(() -> new RuntimeException("Inventory not found for SKU: " + item.getSkuCode()));
+
+			int quantity = item.getQuantity();
+
+			// Safety check
+			if (inventory.getReservedQuantity() < quantity) {
+
+				throw new RuntimeException(
+						"Reserved quantity is less than commit quantity for SKU: " + item.getSkuCode());
+			}
+
+			// Remove from reserved stock
+			inventory.setReservedQuantity(inventory.getReservedQuantity() - quantity);
+
+			invRepo.save(inventory);
+		}
+
+	}
+
 }

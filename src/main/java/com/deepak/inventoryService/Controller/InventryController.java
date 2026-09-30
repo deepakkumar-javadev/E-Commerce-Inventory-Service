@@ -28,75 +28,87 @@ public class InventryController {
 
 	private final InventoryService inventoryService;
 
-	// create inventory api
+	// # ADMIN APIs
+
+	// 1. Create inventory
 	@PostMapping("/create")
 	public ResponseEntity<String> createInventory(@RequestBody InventoryReqDto request) {
-			System.out.println(request.getSkuCode());
-		 String inventory = inventoryService.createInventory(request);
+		System.out.println(request.getSkuCode());
+		String inventory = inventoryService.createInventory(request);
 
 		return ResponseEntity.ok().body(inventory);
 	}
 
-	// get inventory api
+	// 2. Update inventory
+	@PutMapping("/update")
+	public ResponseEntity<String> updateInventory(@RequestBody InventoryUpdateDto req) {
+		inventoryService.updateInventory(req);
+
+		return ResponseEntity.ok("Inventory Updated");
+	}
+
+	// 3. Get all inventory
+	@GetMapping("/getAllStocks")
+	public ResponseEntity<List<InventoryResDto>> getAllInventory() {
+		List<InventoryResDto> allInventory = inventoryService.getAllInventory();
+		return ResponseEntity.ok().body(allInventory);
+	}
+
+	// 4. Update SKU
+	@PutMapping("/updatesku")
+	public ResponseEntity<String> updateSku(@RequestBody InventoryUpdateSku req) {
+
+		String updateSku = inventoryService.updateSku(req.getOldSku(), req.getNewSku());
+
+		return ResponseEntity.ok(updateSku);
+	}
+
+	// 5. Update SKU by ID
+	@PutMapping("/updateskuByid")
+	public ResponseEntity<String> updateSkuById(@RequestBody InventoryUpdateId req) {
+
+		String updateskuById = inventoryService.updateskuById(req);
+
+		return ResponseEntity.ok().body(updateskuById);
+	}
+
+	
+	//# CUSTOMER + ADMIN API
+	
+	//6
 	@GetMapping("/getstock/{skuCode}")
 	public InventoryResDto getInventorystock(@PathVariable String skuCode) {
 
 		return inventoryService.getInventory(skuCode);
 	}
 
-	// update api
-	@PutMapping("/update")
-	public ResponseEntity<String> updateInventory(@RequestBody InventoryUpdateDto req) {
-
-		inventoryService.updateInventory(req);
-
-		return ResponseEntity.ok("Inventory Updated");
-	}
-
-	// reduce api..
+	
+	//# INTERNAL APIs [called by Feignclient]
 
 	@PutMapping("/reduce/{skuCode}")
-	public ResponseEntity<String> reduceInventory(@PathVariable String skuCode, @RequestParam Integer quantity) {
+	public ResponseEntity<String> reduceInventoryBySkuCode(@PathVariable String skuCode,
+			@RequestParam Integer quantity) {
 
 		inventoryService.reduceInventory(skuCode, quantity);
 
-		return ResponseEntity.ok("Inventory Reduced");
+		return ResponseEntity.ok("Inventory Reduced successfully....");
 	}
 
-	// get all inventory
+	// reduce stock throw order service
+	@PutMapping("/reducestock/{skuCode}")
+	public ResponseEntity<Void> reduceStock(@PathVariable String skuCode, @RequestParam Integer quantity) {
 
-	@GetMapping("/getAllStocks")
-	public ResponseEntity<List<InventoryResDto>> getAllInventory() {
-		List<InventoryResDto> allInventory = inventoryService.getAllInventory();
-		return ResponseEntity.ok().body(allInventory);
-	}
-	
-	
-	
-	//Note api only for ADMIN....
-	
-	
-	// skucode update for inventory (only access to admin account )
-	@PutMapping("/updatesku")
-	public ResponseEntity<String> updateSku(@RequestBody InventoryUpdateSku  req) {
+		inventoryService.reduceInventory(skuCode, quantity);
 
-			String updateSku = inventoryService.updateSku(req.getOldSku(), req.getNewSku());
-			
-			return ResponseEntity.ok(updateSku);
+		return ResponseEntity.ok().build();
 	}
-	
-	@PutMapping("/updateskuByid")
-	public ResponseEntity<String> updateSkuById(@RequestBody InventoryUpdateId  req) {
 
-			String updateskuById = inventoryService.updateskuById(req);
-			
-			return ResponseEntity.ok().body(updateskuById);
-	}
-	
+	// get invenotries by list of skucodes
+
 	@PostMapping("/getInventories")
 	public ResponseEntity<List<InventoryResDto>> getInventories(@RequestBody List<String> skucodes) {
 		List<InventoryResDto> allInventory = inventoryService.getInventoryBySkucode(skucodes);
 		return ResponseEntity.ok().body(allInventory);
 	}
-	
+
 }

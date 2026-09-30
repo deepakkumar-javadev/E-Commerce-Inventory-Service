@@ -8,6 +8,9 @@ import com.deepak.inventoryService.DTO.InventoryReqDto;
 import com.deepak.inventoryService.DTO.InventoryResDto;
 import com.deepak.inventoryService.DTO.InventoryUpdateDto;
 import com.deepak.inventoryService.DTO.InventoryUpdateId;
+import com.deepak.inventoryService.kafka.InventoryCommitEvent;
+import com.deepak.inventoryService.kafka.InventoryReserveEvent;
+import com.deepak.inventoryService.kafka.OrderCreatedEvent;
 
 public interface InventoryService {
 
@@ -20,9 +23,14 @@ public interface InventoryService {
 	// update inventory
 	public ResponseEntity<String> updateInventory(InventoryUpdateDto req);
 	
-	// reduce quantity
-	
+	// reduce stock by order service
 	public ResponseEntity<String> reduceInventory( String skuCode,Integer quantity);
+	
+	// reduce Stock by kafka (COD)
+	public void  reduceStock(OrderCreatedEvent event);
+	
+	//reduce stock by kafka (ONLINE)
+	public void reserveStock(InventoryReserveEvent event);
 	
 	// get all inventory...
 	public List<InventoryResDto> getAllInventory();
@@ -33,6 +41,10 @@ public interface InventoryService {
 	public String updateskuById(InventoryUpdateId req);
 	
 	public List<InventoryResDto> getInventoryBySkucode(List<String> skucodes);
+	
+	//COMMIT RESERVED INVENTORY
+	
+	public void commitInventory(InventoryCommitEvent event);
 	
 	
 }

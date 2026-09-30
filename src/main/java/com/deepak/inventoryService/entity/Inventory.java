@@ -26,7 +26,7 @@ public class Inventory {
 
 	private Integer reservedQuantity;
 
-	private String status;
+	private String availablitiyStatus;
 
 	private LocalDateTime createdAt;
 

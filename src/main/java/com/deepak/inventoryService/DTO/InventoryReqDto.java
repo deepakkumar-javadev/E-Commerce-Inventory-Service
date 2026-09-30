@@ -6,5 +6,6 @@ import lombok.Data;
 public class InventoryReqDto {
 
 	private String skuCode;
-	private int stockQuantity;
+	private Integer stockQuantity;
+	
 }

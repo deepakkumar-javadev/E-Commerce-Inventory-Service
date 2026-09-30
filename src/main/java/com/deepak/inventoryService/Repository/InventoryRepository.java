@@ -15,4 +15,5 @@ public interface InventoryRepository  extends JpaRepository<Inventory,Long>{
 	public boolean existsBySkuCode(String newSku );
 	
 	public Optional<Inventory> findById(Long id);
+	
 }
